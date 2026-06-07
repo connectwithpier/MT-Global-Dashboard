@@ -144,6 +144,16 @@ tr.manager-row td:first-child::after{content:' (mgr)';font-size:10px;color:var(-
       <span class="badge badge-ref" id="ref-badge">—</span>
     </label>
     <input type="file" id="ref-file" accept=".csv">
+    <div style="width:1px;height:32px;background:var(--border);align-self:center"></div>
+    <button class="upload-btn" onclick="exportData()" title="Export all saved months to a file">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export data
+    </button>
+    <label class="upload-btn" for="import-file" title="Import saved months from another device">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Import data
+    </label>
+    <input type="file" id="import-file" accept=".json">
   </div>
 </div>
 
@@ -696,6 +706,56 @@ function refTrendSection(){
   },80);
   return el;
 }
+
+// ---------- EXPORT / IMPORT ----------
+function exportData(){
+  const s=loadStore();
+  const ms=Object.keys(s);
+  if(ms.length===0){alert('No saved months to export yet.');return;}
+  const json=JSON.stringify(s,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const date=new Date().toISOString().slice(0,10);
+  a.href=url;a.download=`mt-global-data-${date}.json`;
+  a.click();URL.revokeObjectURL(url);
+}
+
+document.getElementById('import-file').addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const incoming=JSON.parse(ev.target.result);
+      if(typeof incoming!=='object'||Array.isArray(incoming))throw new Error('Invalid format');
+      const existing=loadStore();
+      const inMonths=Object.keys(incoming);
+      const overlap=inMonths.filter(m=>existing[m]);
+      let proceed=true;
+      if(overlap.length>0){
+        proceed=confirm(`These months already exist in your browser and will be overwritten:\n\n${overlap.join(', ')}\n\nContinue?`);
+      }
+      if(!proceed){e.target.value='';return;}
+      const merged={...existing,...incoming};
+      saveStore(merged);
+      renderStoredChips();
+      // load the most recent imported month
+      const sorted=Object.keys(incoming).sort((a,b)=>{
+        const ai=ALL_MONTHS.indexOf(a),bi=ALL_MONTHS.indexOf(b);
+        return(ai<0?99:ai)-(bi<0?99:bi);
+      });
+      if(sorted.length){
+        activeMonth=sorted[sorted.length-1];
+        loadStoredMonth(activeMonth);
+      }
+      alert(`✓ Imported ${inMonths.length} month${inMonths.length>1?'s':''}: ${inMonths.join(', ')}`);
+    }catch(err){
+      alert('Could not read file. Make sure it is a valid MT Global export.\n\n'+err.message);
+    }
+    e.target.value='';
+  };
+  r.readAsText(f);
+});
 
 // ---------- INIT ----------
 renderStoredChips();
